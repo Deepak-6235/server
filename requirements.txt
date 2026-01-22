@@ -1,0 +1,18 @@
+fastapi
+uvicorn[standard]
+
+# Env handling
+python-dotenv
+
+# File upload (multipart/form-data)
+python-multipart
+
+# Image processing
+pillow
+
+# Background removal
+rembg
+onnxruntime
+
+# Google Gemini (NEW official SDK)
+google-genai
