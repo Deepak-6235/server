@@ -1,15 +1,16 @@
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import os, uuid
+import os, uuid, time
+from PIL import Image
 
 from app.core.config import FRONTEND_URL, BASE_URL
-from app.services.ai import analyze_product
+from app.services.ai import analyze_and_generate_views
 from app.services.bg import remove_background
-from app.services.view import generate_views
 
 app = FastAPI()
 
+# Standard Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL],
@@ -21,33 +22,55 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-
 @app.post("/ai/image")
 async def process_image(
     product_name: str = Form(...),
     image: UploadFile = File(...)
 ):
-    ext = image.filename.split(".")[-1]
-    base_name = str(uuid.uuid4())
-    original_path = f"{UPLOAD_DIR}/{base_name}.{ext}"
+    start_time = time.time()
+    
+    try:
+        # 1. Save uploaded image safely
+        ext = image.filename.split(".")[-1]
+        base_name = str(uuid.uuid4())
+        original_filename = f"{base_name}.{ext}"
+        original_path = os.path.join(UPLOAD_DIR, original_filename)
 
-    with open(original_path, "wb") as f:
-        f.write(await image.read())
+        with open(original_path, "wb") as f:
+            content = await image.read()
+            f.write(content)
 
-    # Background removal
-    bg_path = f"{UPLOAD_DIR}/{base_name}_bg.png"
-    remove_background(original_path, bg_path)
+        # 2. Remove background
+        bg_filename = f"{base_name}_bg.png"
+        bg_path = os.path.join(UPLOAD_DIR, bg_filename)
+        remove_background(original_path, bg_path)
 
-    # AI analysis
-    ai_analysis = analyze_product(bg_path, product_name)
+        # 3. AI Generation Logic
+        try:
+            result = analyze_and_generate_views(bg_path, product_name, UPLOAD_DIR)
+            views = result["views"]
+            analysis = result["analysis"]
+        except Exception as e:
+            # Better Fallback Logging
+            print(f"⚠️ AI generation failed: {str(e)}")
+            orig_img = Image.open(bg_path)
+            views = {}
+            for angle in ["front", "back", "left", "right"]:
+                fname = f"{base_name}_{angle}.png"
+                orig_img.save(os.path.join(UPLOAD_DIR, fname))
+                views[angle] = fname
+            analysis = {"category": "Unknown", "error": str(e)}
 
-    # Generate 4 views
-    views = generate_views(bg_path, UPLOAD_DIR, base_name)
-
-    return {
-        "product_name": product_name,
-        "analysis": ai_analysis,
-        "views": {
-            k: f"{BASE_URL}/uploads/{v}" for k, v in views.items()
+        return {
+            "status": "success",
+            "product_name": product_name,
+            "analysis": analysis,
+            "side_views": {
+                k: f"{BASE_URL}/uploads/{v}" for k, v in views.items()
+            },
+            "processing_time": f"{round(time.time() - start_time, 2)}s"
         }
-    }
+        
+    except Exception as e:
+        # If the whole process (like file saving) fails, return a 500
+        raise HTTPException(status_code=500, detail=str(e))
