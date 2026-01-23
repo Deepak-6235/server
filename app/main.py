@@ -46,20 +46,9 @@ async def process_image(
         remove_background(original_path, bg_path)
 
         # 3. AI Generation Logic
-        try:
-            result = analyze_and_generate_views(bg_path, product_name, UPLOAD_DIR)
-            views = result["views"]
-            analysis = result["analysis"]
-        except Exception as e:
-            # Better Fallback Logging
-            print(f"⚠️ AI generation failed: {str(e)}")
-            orig_img = Image.open(bg_path)
-            views = {}
-            for angle in ["front", "back", "left", "right"]:
-                fname = f"{base_name}_{angle}.png"
-                orig_img.save(os.path.join(UPLOAD_DIR, fname))
-                views[angle] = fname
-            analysis = {"category": "Unknown", "error": str(e)}
+        result = analyze_and_generate_views(bg_path, product_name, UPLOAD_DIR)
+        views = result["views"]
+        analysis = result["analysis"]
 
         return {
             "status": "success",

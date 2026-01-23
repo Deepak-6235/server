@@ -16,3 +16,9 @@ onnxruntime
 
 # Google Gemini (NEW official SDK)
 google-genai
+
+
+openai>=1.12.0
+httpx>=0.25.0
+pillow
+
