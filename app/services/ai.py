@@ -5,14 +5,12 @@ from google.genai import types
 from app.core.config import GEMINI_API_KEY
 from app.services.prompt import get_image_generation_config
 
-# Initialize the client
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 def analyze_and_generate_views(image_path: str, product_name: str, upload_dir: str):
     img = Image.open(image_path)
 
-    # UPDATED: Use the specific image-generation model ID
     model_id = "gemini-2.5-flash-image" 
 
     prompt, angles = get_image_generation_config(product_name)
@@ -21,7 +19,6 @@ def analyze_and_generate_views(image_path: str, product_name: str, upload_dir: s
         model=model_id,
         contents=[prompt, img],
         config=types.GenerateContentConfig(
-            # Including TEXT often prevents validation errors on certain SDK versions
             response_modalities=["TEXT", "IMAGE"], 
             candidate_count=1
         )
@@ -32,7 +29,6 @@ def analyze_and_generate_views(image_path: str, product_name: str, upload_dir: s
 
     if response.candidates and response.candidates[0].content.parts:
         for part in response.candidates[0].content.parts:
-            # Check for the generated image data
             if part.inline_data:
                 if image_count < 4:
                     angle = angles[image_count]
