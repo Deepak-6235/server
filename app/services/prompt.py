@@ -14,6 +14,7 @@ def get_image_generation_config(product_name: str):
     Angles: 1. Front View, 2. Back View, 3. Left Side, 4. Right Side.
     Requirements: Maintain 100% color and texture consistency. Use a flat 2D style.
     """
+
     
     angles = ["front", "back", "left", "right"]
     
