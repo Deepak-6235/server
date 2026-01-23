@@ -10,7 +10,6 @@ from app.services.bg import remove_background
 
 app = FastAPI()
 
-# Standard Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL],
@@ -30,7 +29,6 @@ async def process_image(
     start_time = time.time()
     
     try:
-        # 1. Save uploaded image safely
         ext = image.filename.split(".")[-1]
         base_name = str(uuid.uuid4())
         original_filename = f"{base_name}.{ext}"
@@ -40,12 +38,10 @@ async def process_image(
             content = await image.read()
             f.write(content)
 
-        # 2. Remove background
         bg_filename = f"{base_name}_bg.png"
         bg_path = os.path.join(UPLOAD_DIR, bg_filename)
         remove_background(original_path, bg_path)
 
-        # 3. AI Generation Logic
         result = analyze_and_generate_views(bg_path, product_name, UPLOAD_DIR)
         views = result["views"]
         analysis = result["analysis"]
@@ -61,5 +57,4 @@ async def process_image(
         }
         
     except Exception as e:
-        # If the whole process (like file saving) fails, return a 500
         raise HTTPException(status_code=500, detail=str(e))
