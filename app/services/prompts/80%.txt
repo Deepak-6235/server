@@ -27,3 +27,30 @@ STRICT VISUAL RULES (MANDATORY):
 """
     angles = ["front", "back", "left", "right"]
     return prompt, angles
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/////////////////
+
+
+
+
+
+
+Views to include:
+- Image 1 Front view.
+- Image 2 Back view.
+- Image 3 Left side view(it should be exact the products left side view).
+- Image 4 Right side view(it should be exact the products right side view).
