@@ -1,29 +1,28 @@
 def get_image_generation_config(product_name: str):
     prompt = f"""
-OBJECT CONSISTENCY & IDENTITY ANALYSIS (INTERNAL REASONING STEP):
-1. Analyze the object shown and the product name "{product_name}" as a single, fixed physical object.
-2. Establish a precise object identity by determining:
-   - Primary materials (e.g., glass, metal, plastic, paper).
-   - Overall geometry (e.g., box-shaped, cylindrical, rounded, organic).
-   - Functional structure (front-facing side, back-facing side, edges, seams, ports, labels, buttons if applicable).
-3. Lock this object identity. The object must remain structurally and visually identical across all generated images.
+Generate product images suitable for an e-commerce app.
 
-IMAGE GENERATION (gemini-2.5-flash-image):
-Generate exactly FOUR (4) high-resolution images of the SAME object using the locked identity above.
-Each image must show the object from a different orthographic angle:
+Analyze the object named "{product_name}" and keep a single, consistent identity:
+- Same design, color, material, finish, and proportions across all images.
 
-- Image 1: FRONT VIEW — the main face, perfectly centered.
-- Image 2: BACK VIEW — the opposite face, with logically inferred details consistent with the front.
-- Image 3: LEFT SIDE VIEW — a strict 90-degree profile.
-- Image 4: RIGHT SIDE VIEW — a strict 90-degree profile.
+Generate multiple high-quality images of the same object,
+each showing a different view.
+always generate 4 images. Do not generate more or less. generate seperately.
 
-STRICT VISUAL RULES (MANDATORY):
-- PROJECTION: True orthographic projection only. No perspective, no depth distortion.
-- FRAMING: The object must occupy approximately 80% of the frame in every image.
-- LIGHTING: Soft studio rim lighting that outlines the object’s silhouette.
-- CONSISTENCY: Colors, materials, textures, proportions, and scale must be 100% identical across all four images.
-- BACKGROUND: Pure solid black (#000000).
-- OUTPUT REQUIREMENT: Do NOT vary design, color, shape, or proportions between images. Treat all four images as the same physical object photographed from different sides.
+Views to include:
+- Image 1 Front view.
+- Image 2 Back view.
+- Image 3 Left side view(it should be exact the products left side view)
+- Image 4 Right side view(it should be exact the products right side view)
+
+Visual requirements:
+- Orthographic or near-orthographic view.
+- Object clearly visible and centered.
+- Soft studio lighting that makes the object fully visible.
+- Very dark background (near black).
+- Consistent scale, color, material, and geometry.
+
+Each image must clearly show the object from one view.
 """
     angles = ["front", "back", "left", "right"]
     return prompt, angles
