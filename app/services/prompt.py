@@ -1,23 +1,29 @@
 def get_image_generation_config(product_name: str):
     prompt = f"""
-    OBJECT IDENTITY ANALYSIS:
-    1. Examine the provided image and the name "{product_name}".
-    2. Define the 'Object Language': Identify the primary materials (glass, metal, paper, plastic), the structural geometry (box, cylinder, organic), and the functional faces (which side is the front, where are the logical interactable parts).
-    3. Based on this internal definition, formulate a mental model of the object's hidden sides to ensure 100% structural logic.
+OBJECT CONSISTENCY & IDENTITY ANALYSIS (INTERNAL REASONING STEP):
+1. Analyze the object shown and the product name "{product_name}" as a single, fixed physical object.
+2. Establish a precise object identity by determining:
+   - Primary materials (e.g., glass, metal, plastic, paper).
+   - Overall geometry (e.g., box-shaped, cylindrical, rounded, organic).
+   - Functional structure (front-facing side, back-facing side, edges, seams, ports, labels, buttons if applicable).
+3. Lock this object identity. The object must remain structurally and visually identical across all generated images.
 
-    GENERATION STEP (using Nano Banana):
-    Using the identity established above, generate 4 new high-resolution images:
-    - Image 1: FRONT: The primary face of the object, perfectly centered.
-    - Image 2: BACK: The opposite face, inferring logical details (labels, spines, or ports) based on the front.
-    - Image 3: LEFT PROFILE: A 90-degree side view.
-    - Image 4: RIGHT PROFILE: A 90-degree side view.
+IMAGE GENERATION (gemini-2.5-flash-image):
+Generate exactly FOUR (4) high-resolution images of the SAME object using the locked identity above.
+Each image must show the object from a different orthographic angle:
 
-    STRICT VISUAL CONSTRAINTS:
-    - CAMERA: All four views must use a perfect orthographic projection with no lens distortion. The object must fill 80% of the frame.
-    - LIGHTING: Use a 'Rim Light' setup—soft studio highlights that trace the outer edges to define the shape against the black background.
-    - CONSISTENCY: Absolute 100% consistency in color, material texture, and scale across all four frames.
-    - BACKGROUND: Solid #000000 black.
-    """
+- Image 1: FRONT VIEW — the main face, perfectly centered.
+- Image 2: BACK VIEW — the opposite face, with logically inferred details consistent with the front.
+- Image 3: LEFT SIDE VIEW — a strict 90-degree profile.
+- Image 4: RIGHT SIDE VIEW — a strict 90-degree profile.
 
+STRICT VISUAL RULES (MANDATORY):
+- PROJECTION: True orthographic projection only. No perspective, no depth distortion.
+- FRAMING: The object must occupy approximately 80% of the frame in every image.
+- LIGHTING: Soft studio rim lighting that outlines the object’s silhouette.
+- CONSISTENCY: Colors, materials, textures, proportions, and scale must be 100% identical across all four images.
+- BACKGROUND: Pure solid black (#000000).
+- OUTPUT REQUIREMENT: Do NOT vary design, color, shape, or proportions between images. Treat all four images as the same physical object photographed from different sides.
+"""
     angles = ["front", "back", "left", "right"]
     return prompt, angles
