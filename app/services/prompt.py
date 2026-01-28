@@ -24,11 +24,14 @@ Visual requirements:
 - Soft studio lighting that makes the object fully visible.
 - Very dark background (near black).
 - Consistent scale, color, material, and geometry.
-- Side views must show a SINGLE instance of the object (one edge only), not both edges.
-- Top and bottom views must not show any side faces; only the flat top or bottom surface.
 - Each image must contain only ONE physical instance of the product. Never show multiple objects in the same image.
-- Front view must be perfectly flat and face-on, with the camera perpendicular to the front surface (no tilt, no top-down angle).
+- The product must remain in the SAME physical state in all images (do not open, close, unfold, or change configuration between views).
+- The object’s geometry must be treated as fixed and identical across all images; do not alter, reinterpret, or redesign any part of the object between views.
+- Side views must show a SINGLE instance of the object (one edge only), not both edges.
 - Left and right side views must use strict orthographic projection with zero perspective or tilt.
+- Top and bottom views must not show any side faces; only the flat top or bottom surface.
+- Front view must be perfectly flat and face-on, with the camera perpendicular to the front surface (no tilt).
+
 
 
 Each image must clearly show the object from one view.
