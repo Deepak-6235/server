@@ -15,7 +15,7 @@ def analyze_and_generate_views(image_path: str, product_name: str, upload_dir: s
 
     prompt, angles = get_image_generation_config(product_name)
 
-    # Keep regenerating until we get exactly 4 images
+    # Keep regenerating until we get exactly 6 images
     while True:
         response = client.models.generate_content(
             model=model_id,
@@ -32,7 +32,7 @@ def analyze_and_generate_views(image_path: str, product_name: str, upload_dir: s
         if response.candidates and response.candidates[0].content.parts:
             for part in response.candidates[0].content.parts:
                 if part.inline_data:
-                    if image_count < 4:
+                    if image_count < 6:
                         angle = angles[image_count]
                         filename = f"nano_{angle}_{os.path.basename(image_path)}"
                         save_path = os.path.join(upload_dir, filename)
@@ -43,8 +43,8 @@ def analyze_and_generate_views(image_path: str, product_name: str, upload_dir: s
                         views[angle] = filename
                         image_count += 1
         
-        # If we got exactly 4 images, break the loop and return
-        if image_count == 4:
+        # If we got exactly 6 images, break the loop and return
+        if image_count == 6:
             break
     
     return {
