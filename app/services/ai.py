@@ -11,7 +11,7 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 def analyze_and_generate_views(image_path: str, product_name: str, upload_dir: str):
     img = Image.open(image_path)
 
-    model_id = "gemini-2.5-flash-image" 
+    model_id = "gemini-2.5-flash-image"
 
     prompt, angles = get_image_generation_config(product_name)
 
