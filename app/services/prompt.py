@@ -33,8 +33,6 @@ Visual requirements:
 - Front view must be perfectly flat and face-on, with the camera perpendicular to the front surface (no tilt).
 
 
-
-
 Each image must clearly show the object from one view.
 """
     angles = ["front", "back", "left", "right" ,"top", "bottom"]
