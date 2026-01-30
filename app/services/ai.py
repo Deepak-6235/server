@@ -60,6 +60,16 @@ def analyze_and_generate_video(image_path: str, product_name: str, upload_dir: s
     import time
     import json
 
+    # Timing breakdown
+    timings = {
+        "ai_generation_start": None,
+        "ai_generation_end": None,
+        "download_start": None,
+        "download_end": None,
+        "s3_upload_start": None,
+        "s3_upload_end": None,
+    }
+
     # Retry configuration
     MAX_RETRIES = 3
     RETRY_DELAY = 2  # seconds between retries (reduced for faster turnaround)
@@ -76,6 +86,9 @@ def analyze_and_generate_video(image_path: str, product_name: str, upload_dir: s
             print("Starting video generation with Veo 3.1 Fast")
             print(f"Product: {product_name}")
             print(f"Prompt length: {len(prompt)} characters")
+
+            # Start AI generation timer
+            timings["ai_generation_start"] = time.time()
 
             # Use Veo 3.1 Fast for faster generation (17s avg vs 1-4 min)
             # Options: "veo-3.1-generate-preview" (quality) or "veo-3.1-fast-generate-preview" (speed)
@@ -110,6 +123,11 @@ def analyze_and_generate_video(image_path: str, product_name: str, upload_dir: s
                     poll_interval = 5
                 elif poll_count == 6:
                     poll_interval = max_poll_interval
+
+            # End AI generation timer
+            timings["ai_generation_end"] = time.time()
+            ai_generation_time = round(timings["ai_generation_end"] - timings["ai_generation_start"], 2)
+            print(f"⏱️  AI Generation Time: {ai_generation_time}s")
 
             print("=" * 80)
             print("Video generation completed!")
@@ -190,6 +208,9 @@ def analyze_and_generate_video(image_path: str, product_name: str, upload_dir: s
 
                     if video_file:
                         try:
+                            # Start download timer
+                            timings["download_start"] = time.time()
+
                             # Generate S3 key first
                             filename = f"videos/video_{os.path.basename(image_path).split('.')[0]}_{int(time.time())}.mp4"
                             temp_path = os.path.join(upload_dir, f"temp_{filename.split('/')[-1]}")
@@ -309,12 +330,24 @@ def analyze_and_generate_video(image_path: str, product_name: str, upload_dir: s
                             with open(temp_path, 'rb') as f:
                                 video_bytes = f.read()
 
+                            # End download timer
+                            timings["download_end"] = time.time()
+                            download_time = round(timings["download_end"] - timings["download_start"], 2)
                             print(f"Video downloaded successfully, size: {len(video_bytes)} bytes")
+                            print(f"⏱️  Download Time: {download_time}s")
+
+                            # Start S3 upload timer
+                            timings["s3_upload_start"] = time.time()
 
                             # Upload to S3
                             print("Uploading video to S3...")
                             video_url = upload_video_bytes_to_s3(video_bytes, filename)
+
+                            # End S3 upload timer
+                            timings["s3_upload_end"] = time.time()
+                            s3_upload_time = round(timings["s3_upload_end"] - timings["s3_upload_start"], 2)
                             print(f"✅ Video uploaded successfully: {video_url}")
+                            print(f"⏱️  S3 Upload Time: {s3_upload_time}s")
 
                             # Clean up temp file
                             if os.path.exists(temp_path):
@@ -333,14 +366,31 @@ def analyze_and_generate_video(image_path: str, product_name: str, upload_dir: s
                 print("❌ No generated_videos in response")
                 raise Exception("No generated_videos in operation response")
 
-            # If we successfully got video_url, return immediately
+            # If we successfully got video_url, return immediately with timing breakdown
             if video_url:
+                # Calculate timing breakdown
+                ai_gen_time = round(timings["ai_generation_end"] - timings["ai_generation_start"], 2) if timings["ai_generation_end"] else 0
+                download_time = round(timings["download_end"] - timings["download_start"], 2) if timings["download_end"] else 0
+                s3_time = round(timings["s3_upload_end"] - timings["s3_upload_start"], 2) if timings["s3_upload_end"] else 0
+
                 print("=" * 80)
                 print(f"✅ SUCCESS: Video generated and uploaded on attempt {attempt}")
+                print(f"⏱️  TIMING BREAKDOWN:")
+                print(f"   - AI Generation: {ai_gen_time}s")
+                print(f"   - Video Download: {download_time}s")
+                print(f"   - S3 Upload: {s3_time}s")
+                print(f"   - Total Backend: {ai_gen_time + download_time + s3_time}s")
                 print("=" * 80)
+
                 return {
                     "video": video_url,
-                    "analysis": {"status": f"Generated by Veo 3.1 Fast (attempt {attempt}/{MAX_RETRIES})"}
+                    "analysis": {"status": f"Generated by Veo 3.1 Fast (attempt {attempt}/{MAX_RETRIES})"},
+                    "timing": {
+                        "ai_generation_time": f"{ai_gen_time}s",
+                        "download_time": f"{download_time}s",
+                        "s3_upload_time": f"{s3_time}s",
+                        "backend_processing_time": f"{ai_gen_time + download_time + s3_time}s"
+                    }
                 }
 
         except Exception as e:

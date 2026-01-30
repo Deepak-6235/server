@@ -66,9 +66,18 @@ async def process_video(
     image: UploadFile = File(...),
     skip_bg_removal: bool = Form(False)  # Optional flag to skip background removal
 ):
-    start_time = time.time()
+    # Track total processing time
+    total_start_time = time.time()
+
+    # Timing breakdown
+    timing_breakdown = {
+        "upload_time": 0,
+        "bg_removal_time": 0,
+    }
 
     try:
+        # Upload timing
+        upload_start = time.time()
         ext = image.filename.split(".")[-1]
         base_name = str(uuid.uuid4())
         original_filename = f"{base_name}.{ext}"
@@ -78,30 +87,58 @@ async def process_video(
             content = await image.read()
             f.write(content)
 
-        # Skip background removal by default for video - Veo can handle backgrounds
-        # This saves 5-10 seconds of processing time
+        timing_breakdown["upload_time"] = round(time.time() - upload_start, 2)
+        print(f"⏱️  Upload Time: {timing_breakdown['upload_time']}s")
+
+        # Background removal timing
         if skip_bg_removal:
             print("⚡ Skipping background removal for faster processing")
             input_image_path = original_path
+            timing_breakdown["bg_removal_time"] = 0
         else:
             print("⚠️  Background removal enabled (adds 5-10s)")
+            bg_start = time.time()
             bg_filename = f"{base_name}_bg.png"
             bg_path = os.path.join(UPLOAD_DIR, bg_filename)
             remove_background(original_path, bg_path)
             input_image_path = bg_path
+            timing_breakdown["bg_removal_time"] = round(time.time() - bg_start, 2)
+            print(f"⏱️  Background Removal Time: {timing_breakdown['bg_removal_time']}s")
 
+        # Video generation (includes AI, download, S3 upload)
         result = analyze_and_generate_video(input_image_path, product_name, UPLOAD_DIR)
         video_url = result["video"]  # This is now the S3 URL
         analysis = result["analysis"]
+        backend_timing = result.get("timing", {})
+
+        # Calculate total time
+        total_processing_time = round(time.time() - total_start_time, 2)
+
+        print("=" * 80)
+        print("📊 COMPLETE TIMING BREAKDOWN:")
+        print(f"   - Image Upload: {timing_breakdown['upload_time']}s")
+        print(f"   - Background Removal: {timing_breakdown['bg_removal_time']}s")
+        print(f"   - AI Video Generation: {backend_timing.get('ai_generation_time', 'N/A')}")
+        print(f"   - Video Download: {backend_timing.get('download_time', 'N/A')}")
+        print(f"   - S3 Upload: {backend_timing.get('s3_upload_time', 'N/A')}")
+        print(f"   - TOTAL PROCESSING: {total_processing_time}s")
+        print("=" * 80)
 
         return {
             "status": "success",
             "product_name": product_name,
             "analysis": analysis,
             "video_url": video_url,  # Return S3 URL directly
-            "processing_time": f"{round(time.time() - start_time, 2)}s"
+            "total_processing_time": f"{total_processing_time}s",
+            "timing_breakdown": {
+                "upload_time": f"{timing_breakdown['upload_time']}s",
+                "bg_removal_time": f"{timing_breakdown['bg_removal_time']}s",
+                "ai_generation_time": backend_timing.get('ai_generation_time', '0s'),
+                "download_time": backend_timing.get('download_time', '0s'),
+                "s3_upload_time": backend_timing.get('s3_upload_time', '0s'),
+            }
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
