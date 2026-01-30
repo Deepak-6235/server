@@ -63,10 +63,11 @@ async def process_image(
 @app.post("/ai/video")
 async def process_video(
     product_name: str = Form(...),
-    image: UploadFile = File(...)
+    image: UploadFile = File(...),
+    skip_bg_removal: bool = Form(False)  # Optional flag to skip background removal
 ):
     start_time = time.time()
-    
+
     try:
         ext = image.filename.split(".")[-1]
         base_name = str(uuid.uuid4())
@@ -77,11 +78,19 @@ async def process_video(
             content = await image.read()
             f.write(content)
 
-        bg_filename = f"{base_name}_bg.png"
-        bg_path = os.path.join(UPLOAD_DIR, bg_filename)
-        remove_background(original_path, bg_path)
+        # Skip background removal by default for video - Veo can handle backgrounds
+        # This saves 5-10 seconds of processing time
+        if skip_bg_removal:
+            print("⚡ Skipping background removal for faster processing")
+            input_image_path = original_path
+        else:
+            print("⚠️  Background removal enabled (adds 5-10s)")
+            bg_filename = f"{base_name}_bg.png"
+            bg_path = os.path.join(UPLOAD_DIR, bg_filename)
+            remove_background(original_path, bg_path)
+            input_image_path = bg_path
 
-        result = analyze_and_generate_video(bg_path, product_name, UPLOAD_DIR)
+        result = analyze_and_generate_video(input_image_path, product_name, UPLOAD_DIR)
         video_url = result["video"]  # This is now the S3 URL
         analysis = result["analysis"]
 

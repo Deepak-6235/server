@@ -6,7 +6,7 @@ from google.genai import types
 from app.core.config import GEMINI_API_KEY
 from app.services.prompts.Images import get_image_generation_config
 from app.services.prompts.video import get_image_generation_config as get_video_generation_config
-from app.services.s3 import upload_video_bytes_to_s3
+from app.services.s3 import upload_video_bytes_to_s3, upload_stream_to_s3
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -60,267 +60,316 @@ def analyze_and_generate_video(image_path: str, product_name: str, upload_dir: s
     import time
     import json
 
-    try:
-        img = Image.open(image_path)
-        prompt = get_video_generation_config(product_name)
+    # Retry configuration
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2  # seconds between retries (reduced for faster turnaround)
 
-        print("=" * 80)
-        print("Starting video generation with Veo 3.1")
-        print(f"Product: {product_name}")
-        print(f"Prompt length: {len(prompt)} characters")
-        print("=" * 80)
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            print("=" * 80)
+            print(f"Video Generation Attempt {attempt}/{MAX_RETRIES}")
+            print("=" * 80)
 
-        # Use Veo 3.1 for video generation
-        operation = client.models.generate_videos(
-            model="veo-3.1-generate-preview",
-            prompt=prompt,
-        )
+            img = Image.open(image_path)
+            prompt = get_video_generation_config(product_name)
 
-        print(f"Operation started: {operation.name if hasattr(operation, 'name') else 'N/A'}")
-        print(f"Operation done: {operation.done}")
+            print("Starting video generation with Veo 3.1 Fast")
+            print(f"Product: {product_name}")
+            print(f"Prompt length: {len(prompt)} characters")
 
-        # Poll until video generation is complete
-        poll_count = 0
-        while not operation.done:
-            poll_count += 1
-            print(f"[Poll {poll_count}] Waiting for video generation to complete...")
-            time.sleep(10)
-            operation = client.operations.get(operation)
-            print(f"[Poll {poll_count}] Operation done: {operation.done}")
+            # Use Veo 3.1 Fast for faster generation (17s avg vs 1-4 min)
+            # Options: "veo-3.1-generate-preview" (quality) or "veo-3.1-fast-generate-preview" (speed)
+            operation = client.models.generate_videos(
+                model="veo-3.1-fast-generate-preview",  # Using Fast variant for speed
+                prompt=prompt,
+                config=types.GenerateVideosConfig(
+                    resolution="720p",  # Options: "720p", "1080p", "4k" - 720p is fastest
+                    aspect_ratio="16:9",
+                ),
+            )
 
-        print("=" * 80)
-        print("Video generation completed!")
-        print("=" * 80)
+            print(f"Operation started: {operation.name if hasattr(operation, 'name') else 'N/A'}")
+            print(f"Operation done: {operation.done}")
 
-        # Debug: Print the entire operation structure
-        print("\n🔍 DEBUG: Operation attributes:")
-        print(f"  - dir(operation): {dir(operation)}")
+            # Poll until video generation is complete with adaptive intervals
+            # Start with short intervals, then increase to avoid excessive polling
+            poll_count = 0
+            poll_interval = 3  # Start with 3 seconds
+            max_poll_interval = 10  # Max 10 seconds
 
-        if hasattr(operation, 'response'):
-            print(f"\n🔍 DEBUG: operation.response exists")
-            print(f"  - type: {type(operation.response)}")
-            print(f"  - dir(operation.response): {dir(operation.response)}")
+            while not operation.done:
+                poll_count += 1
+                print(f"[Poll {poll_count}] Waiting for video generation to complete... (interval: {poll_interval}s)")
+                time.sleep(poll_interval)
+                operation = client.operations.get(operation)
+                print(f"[Poll {poll_count}] Operation done: {operation.done}")
 
-            if hasattr(operation.response, 'generated_videos'):
-                print(f"\n🔍 DEBUG: operation.response.generated_videos exists")
-                print(f"  - length: {len(operation.response.generated_videos)}")
+                # Adaptive polling: increase interval gradually
+                # First 3 polls: 3s, then increase to 5s, then 10s
+                if poll_count == 3:
+                    poll_interval = 5
+                elif poll_count == 6:
+                    poll_interval = max_poll_interval
 
+            print("=" * 80)
+            print("Video generation completed!")
+            print("=" * 80)
+
+            # Debug: Print the entire operation structure
+            print("\n🔍 DEBUG: Operation attributes:")
+            print(f"  - dir(operation): {dir(operation)}")
+
+            if hasattr(operation, 'response'):
+                print(f"\n🔍 DEBUG: operation.response exists")
+                print(f"  - type: {type(operation.response)}")
+                print(f"  - dir(operation.response): {dir(operation.response)}")
+
+                if hasattr(operation.response, 'generated_videos'):
+                    print(f"\n🔍 DEBUG: operation.response.generated_videos exists")
+                    print(f"  - length: {len(operation.response.generated_videos)}")
+
+                    if len(operation.response.generated_videos) > 0:
+                        generated_video = operation.response.generated_videos[0]
+                        print(f"\n🔍 DEBUG: First generated_video:")
+                        print(f"  - type: {type(generated_video)}")
+                        print(f"  - dir: {dir(generated_video)}")
+
+                        if hasattr(generated_video, 'video'):
+                            print(f"\n🔍 DEBUG: generated_video.video exists")
+                            print(f"  - type: {type(generated_video.video)}")
+                            print(f"  - dir: {dir(generated_video.video)}")
+
+                            # Check all possible attributes
+                            for attr in dir(generated_video.video):
+                                if not attr.startswith('_'):
+                                    try:
+                                        value = getattr(generated_video.video, attr)
+                                        if not callable(value):
+                                            print(f"    - {attr}: {value}")
+                                    except Exception as e:
+                                        print(f"    - {attr}: <error reading: {e}>")
+                else:
+                    print("  ⚠️  operation.response.generated_videos does NOT exist")
+            else:
+                print("  ⚠️  operation.response does NOT exist")
+
+            if hasattr(operation, 'result'):
+                print(f"\n🔍 DEBUG: operation.result exists")
+                print(f"  - type: {type(operation.result)}")
+                print(f"  - dir: {dir(operation.result)}")
+
+            if hasattr(operation, 'error'):
+                print(f"\n🔍 DEBUG: operation.error: {operation.error}")
+
+            print("=" * 80)
+
+            video_url = None
+
+            # Try to extract video using different methods
+            if operation.response and hasattr(operation.response, 'generated_videos'):
                 if len(operation.response.generated_videos) > 0:
                     generated_video = operation.response.generated_videos[0]
-                    print(f"\n🔍 DEBUG: First generated_video:")
-                    print(f"  - type: {type(generated_video)}")
-                    print(f"  - dir: {dir(generated_video)}")
 
-                    if hasattr(generated_video, 'video'):
-                        print(f"\n🔍 DEBUG: generated_video.video exists")
-                        print(f"  - type: {type(generated_video.video)}")
-                        print(f"  - dir: {dir(generated_video.video)}")
+                    # Try different ways to get the video
+                    video_file = None
 
-                        # Check all possible attributes
-                        for attr in dir(generated_video.video):
-                            if not attr.startswith('_'):
-                                try:
-                                    value = getattr(generated_video.video, attr)
-                                    if not callable(value):
-                                        print(f"    - {attr}: {value}")
-                                except Exception as e:
-                                    print(f"    - {attr}: <error reading: {e}>")
-            else:
-                print("  ⚠️  operation.response.generated_videos does NOT exist")
-        else:
-            print("  ⚠️  operation.response does NOT exist")
+                    # Method 1: Check for uri attribute
+                    if hasattr(generated_video, 'video') and hasattr(generated_video.video, 'uri'):
+                        print(f"✅ Found video.uri: {generated_video.video.uri}")
+                        video_file = generated_video.video
 
-        if hasattr(operation, 'result'):
-            print(f"\n🔍 DEBUG: operation.result exists")
-            print(f"  - type: {type(operation.result)}")
-            print(f"  - dir: {dir(operation.result)}")
+                    # Method 2: Check for url attribute
+                    elif hasattr(generated_video, 'video') and hasattr(generated_video.video, 'url'):
+                        print(f"✅ Found video.url: {generated_video.video.url}")
+                        video_file = generated_video.video
 
-        if hasattr(operation, 'error'):
-            print(f"\n🔍 DEBUG: operation.error: {operation.error}")
+                    # Method 3: Check if video is a File object with data
+                    elif hasattr(generated_video, 'video'):
+                        video_file = generated_video.video
+                        print(f"✅ Found video object: {type(video_file)}")
 
-        print("=" * 80)
-
-        video_url = None
-
-        # Try to extract video using different methods
-        if operation.response and hasattr(operation.response, 'generated_videos'):
-            if len(operation.response.generated_videos) > 0:
-                generated_video = operation.response.generated_videos[0]
-
-                # Try different ways to get the video
-                video_file = None
-
-                # Method 1: Check for uri attribute
-                if hasattr(generated_video, 'video') and hasattr(generated_video.video, 'uri'):
-                    print(f"✅ Found video.uri: {generated_video.video.uri}")
-                    video_file = generated_video.video
-
-                # Method 2: Check for url attribute
-                elif hasattr(generated_video, 'video') and hasattr(generated_video.video, 'url'):
-                    print(f"✅ Found video.url: {generated_video.video.url}")
-                    video_file = generated_video.video
-
-                # Method 3: Check if video is a File object with data
-                elif hasattr(generated_video, 'video'):
-                    video_file = generated_video.video
-                    print(f"✅ Found video object: {type(video_file)}")
-
-                if video_file:
-                    try:
-                        # Generate S3 key first
-                        filename = f"videos/video_{os.path.basename(image_path).split('.')[0]}_{int(time.time())}.mp4"
-                        temp_path = os.path.join(upload_dir, f"temp_{filename.split('/')[-1]}")
-
-                        print(f"\n📥 Starting download process...")
-                        print(f"Temp path: {temp_path}")
-
-                        # Extract file name/ID from video_file
-                        file_name = None
-                        if hasattr(video_file, 'name'):
-                            file_name = video_file.name
-                            print(f"Found file_name from .name: {file_name}")
-                        elif hasattr(video_file, 'uri'):
-                            # Extract file name from URI like "files/xyz" or "files/xyz:download"
-                            uri_parts = video_file.uri.split('/')
-                            if len(uri_parts) > 1:
-                                file_name = uri_parts[-1].split(':')[0]
-                                print(f"Extracted file_name from .uri: {file_name}")
-
-                        # Method 1: Try reading file bytes directly if available
+                    if video_file:
                         try:
-                            print("\nMethod 1: Checking for direct bytes access...")
-                            if hasattr(video_file, 'read'):
-                                print("video_file has .read() method, attempting to read...")
-                                video_bytes = video_file.read()
-                                with open(temp_path, 'wb') as f:
-                                    f.write(video_bytes)
-                                print(f"✅ Downloaded using direct .read() - Size: {len(video_bytes)} bytes")
-                            elif hasattr(video_file, 'data'):
-                                print("video_file has .data attribute, attempting to read...")
-                                video_bytes = video_file.data
-                                with open(temp_path, 'wb') as f:
-                                    f.write(video_bytes)
-                                print(f"✅ Downloaded using .data - Size: {len(video_bytes)} bytes")
-                            else:
-                                raise Exception("No direct bytes access available")
-                        except Exception as e1:
-                            print(f"Method 1 failed: {e1}")
+                            # Generate S3 key first
+                            filename = f"videos/video_{os.path.basename(image_path).split('.')[0]}_{int(time.time())}.mp4"
+                            temp_path = os.path.join(upload_dir, f"temp_{filename.split('/')[-1]}")
 
-                            # Method 2: Try using file name with client.files.get()
+                            print(f"\n📥 Starting download process...")
+                            print(f"Temp path: {temp_path}")
+
+                            # Extract file name/ID from video_file
+                            file_name = None
+                            if hasattr(video_file, 'name'):
+                                file_name = video_file.name
+                                print(f"Found file_name from .name: {file_name}")
+                            elif hasattr(video_file, 'uri'):
+                                # Extract file name from URI like "files/xyz" or "files/xyz:download"
+                                uri_parts = video_file.uri.split('/')
+                                if len(uri_parts) > 1:
+                                    file_name = uri_parts[-1].split(':')[0]
+                                    print(f"Extracted file_name from .uri: {file_name}")
+
+                            # Method 1: Try reading file bytes directly if available
                             try:
-                                print("\nMethod 2: Attempting to get file using client.files.get()...")
-                                if not file_name:
-                                    raise Exception("No file name available")
-
-                                print(f"Getting file with name: {file_name}")
-                                file_obj = client.files.get(name=file_name)
-                                print(f"File object retrieved: {type(file_obj)}")
-                                print(f"File object attributes: {[attr for attr in dir(file_obj) if not attr.startswith('_')]}")
-
-                                # Try to read bytes from file object
-                                if hasattr(file_obj, 'read_bytes'):
-                                    video_bytes = file_obj.read_bytes()
+                                print("\nMethod 1: Checking for direct bytes access...")
+                                if hasattr(video_file, 'read'):
+                                    print("video_file has .read() method, attempting to read...")
+                                    video_bytes = video_file.read()
                                     with open(temp_path, 'wb') as f:
                                         f.write(video_bytes)
-                                    print(f"✅ Downloaded using file_obj.read_bytes() - Size: {len(video_bytes)} bytes")
-                                else:
-                                    raise Exception("File object doesn't have read_bytes method")
-
-                            except Exception as e2:
-                                print(f"Method 2 failed: {e2}")
-
-                                # Method 3: Try authenticated HTTP download
-                                try:
-                                    print("\nMethod 3: Attempting authenticated HTTP download...")
-
-                                    # Get the download URI
-                                    video_uri = None
-                                    if hasattr(video_file, 'uri'):
-                                        video_uri = video_file.uri
-                                        print(f"Using video_file.uri: {video_uri}")
-                                    elif hasattr(video_file, 'url'):
-                                        video_uri = video_file.url
-                                        print(f"Using video_file.url: {video_uri}")
-
-                                    if not video_uri:
-                                        raise Exception("No URI or URL found in video file")
-
-                                    # Convert to download URL if needed
-                                    if ':download' not in video_uri:
-                                        if video_uri.startswith('files/'):
-                                            video_uri = f"https://generativelanguage.googleapis.com/v1beta/{video_uri}:download"
-                                        else:
-                                            video_uri = f"{video_uri}:download" if not video_uri.endswith(':download') else video_uri
-
-                                    print(f"Download URL: {video_uri}")
-
-                                    # Add API key as query parameter
-                                    if '?' in video_uri:
-                                        download_url = f"{video_uri}&key={GEMINI_API_KEY}"
-                                    else:
-                                        download_url = f"{video_uri}?key={GEMINI_API_KEY}"
-
-                                    print("Making authenticated request...")
-                                    response = requests.get(download_url, stream=True)
-                                    print(f"Response status: {response.status_code}")
-                                    print(f"Response headers: {dict(response.headers)}")
-                                    response.raise_for_status()
-
+                                    print(f"✅ Downloaded using direct .read() - Size: {len(video_bytes)} bytes")
+                                elif hasattr(video_file, 'data'):
+                                    print("video_file has .data attribute, attempting to read...")
+                                    video_bytes = video_file.data
                                     with open(temp_path, 'wb') as f:
-                                        for chunk in response.iter_content(chunk_size=8192):
-                                            f.write(chunk)
+                                        f.write(video_bytes)
+                                    print(f"✅ Downloaded using .data - Size: {len(video_bytes)} bytes")
+                                else:
+                                    raise Exception("No direct bytes access available")
+                            except Exception as e1:
+                                print(f"Method 1 failed: {e1}")
 
-                                    file_size = os.path.getsize(temp_path)
-                                    print(f"✅ Downloaded using authenticated HTTP - Size: {file_size} bytes")
+                                # Method 2: Try using file name with client.files.get()
+                                try:
+                                    print("\nMethod 2: Attempting to get file using client.files.get()...")
+                                    if not file_name:
+                                        raise Exception("No file name available")
 
-                                except Exception as e3:
-                                    print(f"Method 3 failed: {e3}")
-                                    import traceback
-                                    traceback.print_exc()
-                                    raise Exception(f"All download methods failed. Last error: {e3}")
+                                    print(f"Getting file with name: {file_name}")
+                                    file_obj = client.files.get(name=file_name)
+                                    print(f"File object retrieved: {type(file_obj)}")
+                                    print(f"File object attributes: {[attr for attr in dir(file_obj) if not attr.startswith('_')]}")
 
-                        # Read the bytes
-                        with open(temp_path, 'rb') as f:
-                            video_bytes = f.read()
+                                    # Try to read bytes from file object
+                                    if hasattr(file_obj, 'read_bytes'):
+                                        video_bytes = file_obj.read_bytes()
+                                        with open(temp_path, 'wb') as f:
+                                            f.write(video_bytes)
+                                        print(f"✅ Downloaded using file_obj.read_bytes() - Size: {len(video_bytes)} bytes")
+                                    else:
+                                        raise Exception("File object doesn't have read_bytes method")
 
-                        print(f"Video downloaded successfully, size: {len(video_bytes)} bytes")
+                                except Exception as e2:
+                                    print(f"Method 2 failed: {e2}")
 
-                        # Upload to S3
-                        print("Uploading video to S3...")
-                        video_url = upload_video_bytes_to_s3(video_bytes, filename)
-                        print(f"✅ Video uploaded successfully: {video_url}")
+                                    # Method 3: Try authenticated HTTP download
+                                    try:
+                                        print("\nMethod 3: Attempting authenticated HTTP download...")
 
-                        # Clean up temp file
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
+                                        # Get the download URI
+                                        video_uri = None
+                                        if hasattr(video_file, 'uri'):
+                                            video_uri = video_file.uri
+                                            print(f"Using video_file.uri: {video_uri}")
+                                        elif hasattr(video_file, 'url'):
+                                            video_uri = video_file.url
+                                            print(f"Using video_file.url: {video_uri}")
 
-                    except Exception as download_error:
-                        print(f"❌ Error downloading video: {download_error}")
-                        print(f"Error type: {type(download_error)}")
-                        import traceback
-                        traceback.print_exc()
-                else:
-                    print("❌ Could not find video file in response")
-        else:
-            print("❌ No generated_videos in response")
+                                        if not video_uri:
+                                            raise Exception("No URI or URL found in video file")
 
-        print("=" * 80)
-        return {
-            "video": video_url,
-            "analysis": {"status": "Generated by Veo 3.1" if video_url else "Video generation failed"}
-        }
+                                        # Convert to download URL if needed
+                                        if ':download' not in video_uri:
+                                            if video_uri.startswith('files/'):
+                                                video_uri = f"https://generativelanguage.googleapis.com/v1beta/{video_uri}:download"
+                                            else:
+                                                video_uri = f"{video_uri}:download" if not video_uri.endswith(':download') else video_uri
 
-    except Exception as e:
-        print("=" * 80)
-        print(f"❌ FATAL ERROR in analyze_and_generate_video: {e}")
-        print(f"Error type: {type(e)}")
-        import traceback
-        traceback.print_exc()
-        print("=" * 80)
+                                        print(f"Download URL: {video_uri}")
 
-        return {
-            "video": None,
-            "analysis": {"status": f"Error: {str(e)}"}
-        }
+                                        # Add API key as query parameter
+                                        if '?' in video_uri:
+                                            download_url = f"{video_uri}&key={GEMINI_API_KEY}"
+                                        else:
+                                            download_url = f"{video_uri}?key={GEMINI_API_KEY}"
+
+                                        print("Making authenticated request with streaming...")
+                                        response = requests.get(download_url, stream=True)
+                                        print(f"Response status: {response.status_code}")
+                                        print(f"Response headers: {dict(response.headers)}")
+                                        response.raise_for_status()
+
+                                        # Stream directly to temp file (minimal disk I/O)
+                                        total_size = 0
+                                        with open(temp_path, 'wb') as f:
+                                            for chunk in response.iter_content(chunk_size=65536):  # Larger chunks for speed
+                                                if chunk:
+                                                    f.write(chunk)
+                                                    total_size += len(chunk)
+
+                                        print(f"✅ Downloaded using authenticated HTTP - Size: {total_size} bytes")
+
+                                    except Exception as e3:
+                                        print(f"Method 3 failed: {e3}")
+                                        import traceback
+                                        traceback.print_exc()
+                                        raise Exception(f"All download methods failed. Last error: {e3}")
+
+                            # Read the bytes
+                            with open(temp_path, 'rb') as f:
+                                video_bytes = f.read()
+
+                            print(f"Video downloaded successfully, size: {len(video_bytes)} bytes")
+
+                            # Upload to S3
+                            print("Uploading video to S3...")
+                            video_url = upload_video_bytes_to_s3(video_bytes, filename)
+                            print(f"✅ Video uploaded successfully: {video_url}")
+
+                            # Clean up temp file
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+
+                        except Exception as download_error:
+                            print(f"❌ Error downloading video: {download_error}")
+                            print(f"Error type: {type(download_error)}")
+                            import traceback
+                            traceback.print_exc()
+                            raise  # Re-raise to trigger retry
+                    else:
+                        print("❌ Could not find video file in response")
+                        raise Exception("No video file found in response")
+            else:
+                print("❌ No generated_videos in response")
+                raise Exception("No generated_videos in operation response")
+
+            # If we successfully got video_url, return immediately
+            if video_url:
+                print("=" * 80)
+                print(f"✅ SUCCESS: Video generated and uploaded on attempt {attempt}")
+                print("=" * 80)
+                return {
+                    "video": video_url,
+                    "analysis": {"status": f"Generated by Veo 3.1 Fast (attempt {attempt}/{MAX_RETRIES})"}
+                }
+
+        except Exception as e:
+            print("=" * 80)
+            print(f"❌ Attempt {attempt}/{MAX_RETRIES} FAILED: {e}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            traceback.print_exc()
+            print("=" * 80)
+
+            # If this is not the last attempt, wait and retry
+            if attempt < MAX_RETRIES:
+                print(f"⏳ Waiting {RETRY_DELAY} seconds before retry...")
+                time.sleep(RETRY_DELAY)
+                print(f"🔄 Retrying... (Attempt {attempt + 1}/{MAX_RETRIES})")
+            else:
+                # Last attempt failed
+                print("=" * 80)
+                print(f"❌ ALL {MAX_RETRIES} ATTEMPTS FAILED")
+                print("=" * 80)
+                return {
+                    "video": None,
+                    "analysis": {"status": f"Error after {MAX_RETRIES} attempts: {str(e)}"}
+                }
+
+    # Should never reach here, but just in case
+    return {
+        "video": None,
+        "analysis": {"status": "Video generation failed - unknown error"}
+    }
 
     
