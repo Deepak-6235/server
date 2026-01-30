@@ -45,13 +45,14 @@ def upload_file_to_s3(file_path: str, s3_key: str) -> str:
         raise
 
 
-def upload_video_bytes_to_s3(video_bytes: bytes, s3_key: str) -> str:
+def upload_video_bytes_to_s3(video_bytes: bytes, s3_key: str, content_type: str = 'video/mp4') -> str:
     """
-    Upload video bytes directly to S3 and return the public URL
+    Upload bytes directly to S3 and return the public URL
 
     Args:
-        video_bytes: Video content as bytes
+        video_bytes: Content as bytes
         s3_key: The key (path) to use in S3
+        content_type: MIME type of the content (default: video/mp4)
 
     Returns:
         Public URL of the uploaded file
@@ -65,7 +66,7 @@ def upload_video_bytes_to_s3(video_bytes: bytes, s3_key: str) -> str:
             Bucket=S3_BUCKET,
             Key=s3_key,
             Body=video_bytes,
-            ContentType='video/mp4',
+            ContentType=content_type,
             ACL='public-read',
             # Add metadata to cache for faster delivery
             CacheControl='max-age=31536000',  # Cache for 1 year

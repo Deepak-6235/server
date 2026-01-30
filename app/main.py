@@ -43,19 +43,26 @@ async def process_image(
         remove_background(original_path, bg_path)
 
         result = analyze_and_generate_views(bg_path, product_name, UPLOAD_DIR)
-        views = result["views"]
+        views = result["views"]  # Now contains S3 URLs
         analysis = result["analysis"]
+
+        # Cleanup temporary files
+        try:
+            if os.path.exists(original_path):
+                os.remove(original_path)
+            if os.path.exists(bg_path):
+                os.remove(bg_path)
+        except Exception as cleanup_error:
+            print(f"Warning: Could not cleanup temp files: {cleanup_error}")
 
         return {
             "status": "success",
             "product_name": product_name,
             "analysis": analysis,
-            "side_views": {
-                k: f"{BASE_URL}/uploads/{v}" for k, v in views.items()
-            },
+            "side_views": views,  # Return S3 URLs directly
             "processing_time": f"{round(time.time() - start_time, 2)}s"
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -123,6 +130,15 @@ async def process_video(
         print(f"   - S3 Upload: {backend_timing.get('s3_upload_time', 'N/A')}")
         print(f"   - TOTAL PROCESSING: {total_processing_time}s")
         print("=" * 80)
+
+        # Cleanup temporary files
+        try:
+            if os.path.exists(original_path):
+                os.remove(original_path)
+            if not skip_bg_removal and os.path.exists(input_image_path):
+                os.remove(input_image_path)
+        except Exception as cleanup_error:
+            print(f"Warning: Could not cleanup temp files: {cleanup_error}")
 
         return {
             "status": "success",
