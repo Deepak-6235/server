@@ -82,14 +82,14 @@ async def process_video(
         remove_background(original_path, bg_path)
 
         result = analyze_and_generate_video(bg_path, product_name, UPLOAD_DIR)
-        video_file = result["video"]
+        video_url = result["video"]  # This is now the S3 URL
         analysis = result["analysis"]
 
         return {
             "status": "success",
             "product_name": product_name,
             "analysis": analysis,
-            "video_url": f"{BASE_URL}/uploads/{video_file}" if video_file else None,
+            "video_url": video_url,  # Return S3 URL directly
             "processing_time": f"{round(time.time() - start_time, 2)}s"
         }
         
