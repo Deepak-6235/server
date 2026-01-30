@@ -3,7 +3,7 @@ from PIL import Image
 from google import genai
 from google.genai import types
 from app.core.config import GEMINI_API_KEY
-from app.services.prompt import get_image_generation_config
+from app.services.prompts.Images import get_image_generation_config
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
