@@ -5,7 +5,7 @@ import os, uuid, time
 from PIL import Image
 
 from app.core.config import FRONTEND_URL, BASE_URL
-from app.services.ai import analyze_and_generate_views
+from app.services.ai import analyze_and_generate_views, analyze_and_generate_video
 from app.services.bg import remove_background
 
 app = FastAPI()
@@ -60,6 +60,41 @@ async def process_image(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/ai/video")
+async def process_video(
+    product_name: str = Form(...),
+    image: UploadFile = File(...)
+):
+    start_time = time.time()
+    
+    try:
+        ext = image.filename.split(".")[-1]
+        base_name = str(uuid.uuid4())
+        original_filename = f"{base_name}.{ext}"
+        original_path = os.path.join(UPLOAD_DIR, original_filename)
+
+        with open(original_path, "wb") as f:
+            content = await image.read()
+            f.write(content)
+
+        bg_filename = f"{base_name}_bg.png"
+        bg_path = os.path.join(UPLOAD_DIR, bg_filename)
+        remove_background(original_path, bg_path)
+
+        result = analyze_and_generate_video(bg_path, product_name, UPLOAD_DIR)
+        video_file = result["video"]
+        analysis = result["analysis"]
+
+        return {
+            "status": "success",
+            "product_name": product_name,
+            "analysis": analysis,
+            "video_url": f"{BASE_URL}/uploads/{video_file}" if video_file else None,
+            "processing_time": f"{round(time.time() - start_time, 2)}s"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
